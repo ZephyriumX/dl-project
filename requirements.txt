@@ -1,0 +1,23 @@
+# Core (all preinstalled on current Kaggle GPU images except pennylane)
+torch>=2.1
+torchvision>=0.16
+timm>=0.9.12          # verified locally with 1.0.31
+numpy>=1.24
+pandas>=2.0
+pyarrow>=12           # parquet artifacts
+scikit-learn>=1.3
+scipy>=1.10
+pydicom>=2.4          # verified locally with 3.0.2
+opencv-python-headless>=4.8   # Kaggle ships opencv-python; either provides cv2
+matplotlib>=3.7
+PyYAML>=6.0
+psutil>=5.9
+
+# Quantum reference backend (optional at runtime: the default VQC backend is a pure-PyTorch exact simulator)
+pennylane>=0.36       # verified locally with 0.45.1
+
+# Development / validation
+pytest>=7
+nbformat>=5.9
+nbclient>=0.8
+ipykernel>=6

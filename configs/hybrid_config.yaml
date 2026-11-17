@@ -1,0 +1,61 @@
+# Track B - CNN-Transformer hybrid and its standalone CNN reference (Notebook 02).
+
+base:
+  seed: 42
+  hybrid:
+    kind: cnn_transformer
+    name: cnn_transformer_hybrid
+    cnn_name: efficientnet_b0
+    pretrained: true
+    fallback: random_init
+    out_index: 3                   # EfficientNet-B0 stride-16 stage (112 ch, 14x14 @ 224 px)
+    d_model: 256
+    depth: 2
+    heads: 8
+    mlp_ratio: 2.0
+    dropout: 0.1
+    fusion: concat                 # concat | cls_only | gap_only
+    grid_size: 14
+  cnn_reference:                   # standalone CNN with the same stem, plain linear head
+    {name: efficientnet_b0, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+  fusion_ablation: []              # e.g. [gap_only, cls_only] (feature-module ablation)
+  weights_dir: null
+
+  train:
+    epochs: 5
+    lr: 5.0e-4
+    backbone_lr: 1.0e-4
+    weight_decay: 0.05
+    scheduler: cosine
+    warmup_epochs: 0.3
+    grad_clip: 1.0
+    amp: true
+    amp_dtype: null
+    early_stopping_patience: 2
+    monitor: val_macro_auc
+    freeze_backbone_epochs: 0
+    max_train_steps_per_epoch: null
+    max_eval_steps: null
+    log_every: 200
+  loss: {kind: bce, pos_weight: sqrt_inverse, pos_weight_clip: [1.0, 20.0], label_weights: [1, 1, 1, 1, 1, 2]}
+  loader: {batch_size: null, num_workers: null, probe_batch_size: true}
+  limits: null
+  threshold_method: youden
+  n_boot: 1000
+
+modes:
+  smoke:
+    train: {epochs: 1, max_train_steps_per_epoch: 10, max_eval_steps: 5, log_every: 5, early_stopping_patience: 1}
+    loader: {batch_size: 16, probe_batch_size: false}
+    limits:
+      train: {max_images: 320}
+      val: {max_images: 160}
+      test: {max_images: 160}
+    n_boot: 50
+  pilot:
+    train: {epochs: 3, early_stopping_patience: 1}
+    fusion_ablation: [gap_only]
+    n_boot: 300
+  full:
+    train: {epochs: 5}
+    fusion_ablation: [gap_only, cls_only]
