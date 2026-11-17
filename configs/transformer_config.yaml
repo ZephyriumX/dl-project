@@ -1,0 +1,60 @@
+# Track A - classical Transformer benchmark (Notebook 01).
+# All models share the data pipeline, split manifest, preprocessing, loss and evaluation.
+
+base:
+  seed: 42
+  models:                          # name -> timm id resolved in src/models/transformers.py
+    - {name: deit_small, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+    - {name: swin_tiny, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+    - {name: maxvit_tiny, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+  optional_models:                 # only run if listed in `run_optional` and timm supports them
+    - {name: vit_small, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+    - {name: beit_base, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+  run_optional: []
+  weights_dir: null                # attached Kaggle dataset with offline timm weights (see README)
+
+  train:
+    epochs: 5
+    lr: 3.0e-4                     # head
+    backbone_lr: 5.0e-5
+    weight_decay: 0.05
+    scheduler: cosine
+    warmup_epochs: 0.3
+    grad_clip: 1.0
+    amp: true
+    amp_dtype: null                # null -> bf16 if supported else fp16
+    accum_steps: 1
+    early_stopping_patience: 2
+    monitor: val_macro_auc
+    freeze_backbone_epochs: 0
+    max_train_steps_per_epoch: null
+    max_eval_steps: null
+    log_every: 200
+  loss: {kind: bce, pos_weight: sqrt_inverse, pos_weight_clip: [1.0, 20.0], label_weights: [1, 1, 1, 1, 1, 2]}
+  loader: {batch_size: null, num_workers: null, probe_batch_size: true}
+  limits: null                     # per-split caps {train: {max_groups, max_images}, ...}; null = full split
+  threshold_method: youden
+  n_boot: 1000
+  ablation_single_window: false    # ablation H: re-train the best Transformer with channel_mode=brain3
+
+modes:
+  smoke:
+    models:
+      - {name: deit_small, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+      - {name: swin_tiny, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+      - {name: maxvit_tiny, kind: timm, pretrained: true, fallback: random_init, dropout: 0.2, drop_path_rate: 0.1}
+    train: {epochs: 1, max_train_steps_per_epoch: 10, max_eval_steps: 5, log_every: 5, early_stopping_patience: 1}
+    loader: {batch_size: 16, probe_batch_size: false}
+    limits:
+      train: {max_images: 320}
+      val: {max_images: 160}
+      test: {max_images: 160}
+    n_boot: 50
+  pilot:
+    train: {epochs: 3, early_stopping_patience: 1}
+    n_boot: 300
+    ablation_single_window: true
+  full:
+    train: {epochs: 5, early_stopping_patience: 2}
+    n_boot: 1000
+    ablation_single_window: true

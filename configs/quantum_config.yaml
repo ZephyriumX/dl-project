@@ -1,0 +1,84 @@
+# Track C - quantum-classical hybrid and matched classical controls (Notebook 03).
+#
+# PREDETERMINED, BOUNDED BUDGET: the head grid below is fixed before any result is seen.
+# Every head is trained with the same features, epochs, optimiser, early stopping and seeds.
+# Do not add configurations after looking at test results.
+
+base:
+  seed: 42
+  backbone:
+    source: auto                   # auto -> Track-A/B experiment with the best VALIDATION macro AUC; or an experiment_id
+    candidates_prefix: ["A_", "B_"]
+    feature_batch_size: 128
+
+  head_defaults:
+    k: 4                           # bottleneck width = number of qubits for the VQC
+    hidden: 16
+    dropout: 0.0
+    norm: layernorm
+    scaling: pi_tanh               # angles = pi * tanh(LayerNorm(Wf + b))
+    vqc:
+      n_layers: 2
+      encoding: ry
+      rotation: rot
+      entanglement: cyclic
+      hadamard_init: false
+      data_reuploading: false
+      backend: torch               # exact torch state-vector simulator (equivalence with PennyLane is unit-tested)
+
+  # Primary comparison (C vs B controls). Same k, same encoder/readout, same budget.
+  primary:
+    - {id: linear_probe, kind: linear_probe}
+    - {id: bottleneck_identity, kind: bottleneck_identity}
+    - {id: bottleneck_mlp, kind: bottleneck_mlp}
+    - {id: vqc_q4_l2_cyclic, kind: vqc}
+
+  # Quantum ablations (D, E, F). Bounded: at most 6 extra heads.
+  ablations:
+    - {id: vqc_q4_l2_noent, kind: vqc, vqc: {entanglement: none}}           # D: no entanglement
+    - {id: vqc_q4_l1_cyclic, kind: vqc, vqc: {n_layers: 1}}                  # E: depth
+    - {id: vqc_q4_l4_cyclic, kind: vqc, vqc: {n_layers: 4}}                  # E: depth
+    - {id: vqc_q2_l2_cyclic, kind: vqc, k: 2}                                # F: qubits
+    - {id: vqc_q8_l2_cyclic, kind: vqc, k: 8}                                # F: qubits
+    - {id: bottleneck_mlp_k8, kind: bottleneck_mlp, k: 8}                    # classical control for F (k=8)
+
+  seeds: [0, 1, 2, 3, 4]
+  run_ablations: true
+
+  train:
+    epochs: 30
+    lr: 2.0e-3
+    weight_decay: 1.0e-4
+    scheduler: cosine
+    warmup_epochs: 1.0
+    grad_clip: 1.0
+    early_stopping_patience: 5
+    monitor: val_macro_auc
+    log_every: 0
+  loss: {kind: bce, pos_weight: sqrt_inverse, pos_weight_clip: [1.0, 20.0], label_weights: [1, 1, 1, 1, 1, 2]}
+  batch_size: 512
+  threshold_method: youden
+  n_boot: 500                      # per (head, seed) on test; paired tests in Notebook 04 use n_boot from there
+
+  pennylane_crosscheck:            # run the reference PennyLane backend on a small batch to verify + time it
+    enabled: true
+    n_samples: 256
+
+  end_to_end:                      # optional: fine-tune backbone through the VQC (expensive; off by default)
+    enabled: false
+    epochs: 2
+
+modes:
+  smoke:
+    seeds: [0, 1]
+    run_ablations: true
+    ablations:
+      - {id: vqc_q4_l2_noent, kind: vqc, vqc: {entanglement: none}}
+    train: {epochs: 3, early_stopping_patience: 2}
+    batch_size: 64
+    n_boot: 20
+    pennylane_crosscheck: {n_samples: 16}
+  pilot:
+    seeds: [0, 1, 2]
+  full:
+    seeds: [0, 1, 2, 3, 4]
